@@ -22,9 +22,9 @@ public:
     // Grid on the 1D pads (on by default). A pad can override it with SmartPad::ShowGrid.
     // Its look comes from the style: GetStyle()->SetGridColor(...), SetGridStyle(...), SetGridWidth(...)
     void ShowGrid(Bool_t show = kTRUE) { fOptions.grid = show; }
-    // Ticks pointing out of the frame (default: inside)
+    // Ticks pointing out of the frame (default: outside)
     void SetTicksOutside(Bool_t outside = kTRUE) { fOptions.ticksOutside = outside; }
-    // Ticks also on the top and right sides (default: on). Both off and outside: matplotlib-like axes.
+    // Ticks also on the top and right sides (default: off). Outside and not mirrored: matplotlib-like axes.
     void SetMirrorTicks(Bool_t mirror = kTRUE) { fOptions.mirrorTicks = mirror; }
     void DrawAndSave();
 
