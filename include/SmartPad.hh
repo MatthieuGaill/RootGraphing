@@ -74,6 +74,7 @@ private:
     Bool_t fLegendOverlaps = kFALSE;
 
     Int_t fShowGrid = -1; // grid on 1D pads: -1 canvas default, 0 off, 1 on
+    Layout::Options fOptions; // canvas options of the current drawing
 
     // Layout of the current drawing, in pixels
     struct Margins {
@@ -109,9 +110,11 @@ private:
     void LegendSizePx(Double_t textPx, Double_t& widthPx, Double_t& heightPx, Double_t& symbolPx) const;
     static TString LegendOption(const Drawable& d);
     void DrawLegend();
+    Double_t OutsideTickPx() const { return fOptions.ticksOutside ? fSizes.tick : 0.; }
+    void DrawOutsideTicks();
 
     // Called by PadContainer when the page is drawn, in this order
-    void Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes, Bool_t gridDefault);
+    void Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes, const Layout::Options& options);
     Bool_t PlaceLegend(); // after the margins; kTRUE if the y range had to grow to fit the legend
     void DrawAll();
 

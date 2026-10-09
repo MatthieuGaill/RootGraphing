@@ -246,7 +246,7 @@ void SmartCanvas::DrawAndSave() {
 
         this->Clear();    // Clear canvas before drawing new page (the pads are not deleted)
         this->cd();       // Make canvas the current pad
-        padContainer->DrawAllPads(this, fSizes, fShowGrid);  // Pass canvas pointer
+        padContainer->DrawAllPads(this, fSizes, fOptions);  // Pass canvas pointer
         this->Update();   // Update canvas after all pads are drawn
 
         // Save each page

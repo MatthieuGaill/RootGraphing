@@ -33,6 +33,13 @@ struct Sizes {
     Sizes Scaled(Double_t scale) const;
 };
 
+// Canvas-wide drawing options, given to every pad
+struct Options {
+    Bool_t grid = kTRUE;          // grid on the 1D pads (a pad can override it)
+    Bool_t ticksOutside = kTRUE; // ticks pointing out of the frame
+    Bool_t mirrorTicks = kFALSE;   // ticks also on the top and right sides
+};
+
 // Width of a (TLatex) string in units of the font size, from the Helvetica metrics
 Double_t TextWidthEm(const char* text);
 

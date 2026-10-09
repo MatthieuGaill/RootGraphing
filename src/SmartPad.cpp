@@ -18,6 +18,7 @@
 #include <limits>
 #include "TError.h"
 #include "TStyle.h"
+#include "TGaxis.h"
 
 namespace ROOTEnhancedGraphing {
 
@@ -246,7 +247,7 @@ void SmartPad::ComputeFrame() {
                                                  : Layout::AxisLabels{};
 }
 
-void SmartPad::Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes, Bool_t gridDefault) {
+void SmartPad::Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes, const Layout::Options& options) {
     Clear(); // remove the previous drawing: the frame is deleted, user objects are only detached
 
     // Pad look from the current (SmartCanvas) style. Not UseCurrentStyle(): it would reset log scales.
@@ -257,8 +258,11 @@ void SmartPad::Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Siz
     SetFrameLineColor(gStyle->GetFrameLineColor());
     SetFrameLineWidth(gStyle->GetFrameLineWidth());
     SetFrameBorderMode(gStyle->GetFrameBorderMode());
-    SetTicks(gStyle->GetPadTickX(), gStyle->GetPadTickY());
-    const Bool_t grid = (dimension == k1D) && (fShowGrid < 0 ? gridDefault : fShowGrid > 0);
+    fOptions = options;
+    // Mirrored ticks drawn by ROOT only when inside; outside ones are drawn by DrawOutsideTicks
+    const Int_t mirror = (options.mirrorTicks && !options.ticksOutside) ? 1 : 0;
+    SetTicks(mirror, mirror);
+    const Bool_t grid = (dimension == k1D) && (fShowGrid < 0 ? options.grid : fShowGrid > 0);
     SetGrid(grid, grid); // drawn with the frame, hence below the data
 
     fSizes = sizes;
@@ -280,16 +284,21 @@ SmartPad::Margins SmartPad::RequiredMargins() const {
     const Bool_t hasXTitle = xAxis && std::strlen(xAxis->GetTitle()) > 0;
     const Bool_t hasYTitle = yAxis && std::strlen(yAxis->GetTitle()) > 0;
 
-    m.left = s.labelOffset + fYLabels.maxWidthEm * s.label + s.outer;
+    const Double_t labelShift = s.labelOffset + OutsideTickPx(); // labels go past outside ticks
+    m.left = labelShift + fYLabels.maxWidthEm * s.label + s.outer;
     if (hasYTitle) m.left += s.titleGap + 0.95 * s.title;
 
-    m.bottom = s.labelOffset + 0.9 * s.label + s.outer;
+    m.bottom = labelShift + 0.9 * s.label + s.outer;
     if (hasXTitle) m.bottom += s.titleGap + 0.95 * s.title;
 
     // The last x label is centred on the axis end and sticks out to the right
     m.right = std::max(m.right, 0.5 * fXLabels.lastWidthEm * s.label + 0.3 * s.label);
     if (fXLabels.useExponent) m.right = std::max(m.right, 3. * s.label); // "x10^{n}" after the axis end
     if (fYLabels.useExponent) m.top += 1.2 * s.label;                    // "x10^{n}" above the axis
+    if (fOptions.ticksOutside && fOptions.mirrorTicks) {                 // outside ticks on top/right
+        m.top = std::max(m.top, s.tick + 0.3 * s.label);
+        m.right = std::max(m.right, s.tick + 0.3 * s.label);
+    }
 
     if (HasZPalette()) {
         // ROOT draws the palette between 0.5% and 5% of the pad width right of the frame
@@ -339,16 +348,19 @@ void SmartPad::StyleAxis(TAxis* axis, char which) const {
     axis->CenterTitle();
     axis->SetNoExponent(!labels.useExponent);
 
-    // Offsets: label offsets are fractions of the pad size, tick lengths of the frame size
+    // Offsets: label offsets are fractions of the pad size, tick lengths of the frame size.
+    // Outside ticks are separate axes (DrawOutsideTicks): no frame ticks, labels moved past them.
+    const Double_t labelOffset = s.labelOffset + ((which == 'z') ? 0. : OutsideTickPx());
+    const Bool_t frameTicks = !fOptions.ticksOutside;
     if (which == 'x') {
-        axis->SetLabelOffset(s.labelOffset / fPadHpx);
-        axis->SetTickLength(s.tick / frameHpx);
-        const Double_t titleCenter = s.labelOffset + 0.9 * s.label + s.titleGap + 0.45 * s.title;
+        axis->SetLabelOffset(labelOffset / fPadHpx);
+        axis->SetTickLength(frameTicks ? s.tick / frameHpx : 0.);
+        const Double_t titleCenter = labelOffset + 0.9 * s.label + s.titleGap + 0.45 * s.title;
         axis->SetTitleOffset(Layout::XTitleOffset(titleCenter, s.title));
     } else {
-        axis->SetLabelOffset(s.labelOffset / fPadWpx);
-        if (which == 'y') axis->SetTickLength(s.tick / frameWpx);
-        const Double_t titleCenter = s.labelOffset + labels.maxWidthEm * s.label + s.titleGap + 0.45 * s.title;
+        axis->SetLabelOffset(labelOffset / fPadWpx);
+        if (which == 'y') axis->SetTickLength(frameTicks ? s.tick / frameWpx : 0.);
+        const Double_t titleCenter = labelOffset + labels.maxWidthEm * s.label + s.titleGap + 0.45 * s.title;
         axis->SetTitleOffset(Layout::YTitleOffset(titleCenter, s.title));
     }
 }
@@ -372,6 +384,7 @@ void SmartPad::DrawAll() {
     }
     StyleAxis(frame->GetXaxis(), 'x');
     StyleAxis(frame->GetYaxis(), 'y');
+    if (fOptions.ticksOutside) DrawOutsideTicks();
 
     for (auto& d : fDrawables) {
         TString opt = d.option;
@@ -402,6 +415,36 @@ Double_t SmartPad::ToFracX(Double_t x) const {
 Double_t SmartPad::ToFracY(Double_t y) const {
     if (GetLogy()) return (std::log10(y) - std::log10(fFrame[2])) / (std::log10(fFrame[3]) - std::log10(fFrame[2]));
     return (y - fFrame[2]) / (fFrame[3] - fFrame[2]);
+}
+
+void SmartPad::DrawOutsideTicks() {
+    // Tick-only axes on the outer side of the frame; the frame axes keep the labels, titles and grid.
+    // TGaxis takes user coordinates (it converts them itself on log scales)
+    const Bool_t logx = GetLogx(), logy = GetLogy();
+    const Double_t x0 = fFrame[0], x1 = fFrame[1], y0 = fFrame[2], y1 = fFrame[3];
+
+    // With the "S" option, TGaxis tick sizes are in units of padH * frameW / padW for horizontal axes
+    // and padW * frameH / padH for vertical ones (calibrated on rendered output)
+    const Double_t sizeH = fSizes.tick * fPadWpx / (fPadHpx * FrameWpx());
+    const Double_t sizeV = fSizes.tick * fPadHpx / (fPadWpx * FrameHpx());
+
+    auto draw = [&](Double_t xa, Double_t ya, Double_t xb, Double_t yb, Double_t wmin, Double_t wmax,
+                    Double_t size, TString chopt, Bool_t log) {
+        // "U": no labels, "S": tick size from SetTickSize, "G": log scale; "+"/"-" pick the outer side
+        chopt += "US";
+        if (log) chopt += "G";
+        TGaxis* axis = new TGaxis(xa, ya, xb, yb, wmin, wmax, Layout::kNdivisions, chopt);
+        axis->SetBit(kCanDelete); // deleted with the pad drawing
+        axis->SetTickSize(size);
+        axis->SetLineColor(1);
+        axis->Draw();
+    };
+    draw(x0, y0, x1, y0, fFrame[0], fFrame[1], sizeH, "-", logx); // bottom
+    draw(x0, y0, x0, y1, fFrame[2], fFrame[3], sizeV, "+", logy); // left
+    if (fOptions.mirrorTicks) {
+        draw(x0, y1, x1, y1, fFrame[0], fFrame[1], sizeH, "+", logx);                      // top
+        if (!HasZPalette()) draw(x1, y0, x1, y1, fFrame[2], fFrame[3], sizeV, "-", logy); // right, unless a palette is there
+    }
 }
 
 void SmartPad::FillGrid() {
@@ -547,7 +590,7 @@ Bool_t SmartPad::PlaceLegend() {
 
     const Double_t text = fLegendTextPx;
     LegendSizePx(text, wPx, hPx, symbolPx);
-    const Double_t insetPx = fSizes.tick + 0.3 * text; // keep clear of the ticks
+    const Double_t insetPx = (fOptions.ticksOutside ? 0.5 : 1.) * fSizes.tick + 0.3 * text; // keep clear of the ticks
     const Double_t gapPx = 0.4 * text;                  // between the data and the legend
 
     const Double_t wF = wPx / FrameWpx();

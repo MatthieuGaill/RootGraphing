@@ -69,14 +69,14 @@ void PadContainer::ApplyAlignedMargins() {
     }
 }
 
-void PadContainer::DrawAllPads(TVirtualPad* parent, const Layout::Sizes& baseSizes, Bool_t gridDefault) {
+void PadContainer::DrawAllPads(TVirtualPad* parent, const Layout::Sizes& baseSizes, const Layout::Options& options) {
     // Text sizes are in pixels, scaled with the canvas so that the style does not depend on its size
     const Double_t canvasW = parent->GetWw();
     const Double_t canvasH = parent->GetWh();
     const Layout::Sizes sizes = baseSizes.Scaled(std::min(canvasW, canvasH) / Layout::kRefPixels);
 
     for (auto& pad : fPads) {
-        pad->Prepare(canvasW, canvasH, sizes, gridDefault);
+        pad->Prepare(canvasW, canvasH, sizes, options);
         if (!pad->HasDrawables()) {
             ::Warning("PadContainer::DrawAllPads", "Pad \"%s\" of page %d has no drawables added. Skipping.", pad->GetName(), fIndex);
         }

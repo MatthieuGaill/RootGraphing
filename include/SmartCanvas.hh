@@ -21,7 +21,11 @@ public:
     void SetLegendTextSize(Double_t sizePx) { fSizes.legend = sizePx; }
     // Grid on the 1D pads (on by default). A pad can override it with SmartPad::ShowGrid.
     // Its look comes from the style: GetStyle()->SetGridColor(...), SetGridStyle(...), SetGridWidth(...)
-    void ShowGrid(Bool_t show = kTRUE) { fShowGrid = show; }
+    void ShowGrid(Bool_t show = kTRUE) { fOptions.grid = show; }
+    // Ticks pointing out of the frame (default: inside)
+    void SetTicksOutside(Bool_t outside = kTRUE) { fOptions.ticksOutside = outside; }
+    // Ticks also on the top and right sides (default: on). Both off and outside: matplotlib-like axes.
+    void SetMirrorTicks(Bool_t mirror = kTRUE) { fOptions.mirrorTicks = mirror; }
     void DrawAndSave();
 
 private:
@@ -29,7 +33,7 @@ private:
     Bool_t fverbose = false;
     std::unique_ptr<TStyle> fStyle;
     Layout::Sizes fSizes; // text sizes and spacings, in pixels for an 800x600 canvas
-    Bool_t fShowGrid = kTRUE;
+    Layout::Options fOptions;
     std::map<Int_t, std::unique_ptr<PadContainer>> fPages;
     Int_t fActivePageIndex = -1;
 
