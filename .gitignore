@@ -3,3 +3,5 @@ test.cpp
 buid/*
 *.d
 *.o
+src/*.o
+src/*.d
