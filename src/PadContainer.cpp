@@ -10,189 +10,101 @@
 */
 
 #include "PadContainer.hh"
+#include <cmath>
 
 namespace ROOTEnhancedGraphing {
 
 PadContainer::PadContainer(Int_t index)
     : fIndex(index)
 {
-    fPads.clear();
-    fNPads = 0;
 }
 
 PadContainer::~PadContainer() {
     // unique_ptr automatically cleans up fPads
 }
 
-void PadContainer::AddPad(const char* name, const char* title, Double_t x1, Double_t y1, Double_t x2, Double_t y2) {
+Bool_t PadContainer::AddPad(const char* name, const char* title, Double_t x1, Double_t y1, Double_t x2, Double_t y2) {
+    if (!(x1 < x2) || !(y1 < y2) || x1 < 0 || x2 > 1 || y1 < 0 || y2 > 1) {
+        ::Error("PadContainer::AddPad", "Pad \"%s\": invalid coordinates (%g,%g)-(%g,%g), need 0 <= low < up <= 1.",
+                name, x1, y1, x2, y2);
+        return kFALSE;
+    }
     fPads.push_back(std::make_unique<SmartPad>(name, title, x1, y1, x2, y2));
-    fNPads++;
+    return kTRUE;
 }
 
 void PadContainer::cd(Int_t padIndex) {
-    if (padIndex < 0 || padIndex >= fPads.size()) {
-        std::cerr << "Pad index out of range!" << std::endl;
-        return;
-    }
-    fPads[padIndex]->cd();
+    if (SmartPad* pad = GetPad(padIndex)) pad->cd();
 }
 
-void PadContainer::DrawAllPads(TVirtualPad* parent) {
+void PadContainer::ApplyAlignedMargins() {
+    const size_t n = fPads.size();
+    std::vector<SmartPad::Margins> margins(n);
+    for (size_t i = 0; i < n; ++i) {
+        if (fPads[i]->HasDrawables()) margins[i] = fPads[i]->RequiredMargins();
+    }
 
-    if (mode == kUpDown) fSameYMargin = true;
+    // Pads stacked in a column share their left/right margins, pads in a row their bottom/top ones,
+    // so that the frames line up
+    auto same = [](Double_t a, Double_t b) { return std::abs(a - b) < 1e-6; };
+    std::vector<SmartPad::Margins> aligned = margins;
+    for (size_t i = 0; i < n; ++i) {
+        const SmartPad* pi = fPads[i].get();
+        for (size_t j = 0; j < n; ++j) {
+            const SmartPad* pj = fPads[j].get();
+            if (j == i || !pj->HasDrawables()) continue;
+            if (same(pi->fxlow, pj->fxlow) && same(pi->fxup, pj->fxup)) {
+                aligned[i].left = std::max(aligned[i].left, margins[j].left);
+                aligned[i].right = std::max(aligned[i].right, margins[j].right);
+            }
+            if (same(pi->fylow, pj->fylow) && same(pi->fyup, pj->fyup)) {
+                aligned[i].bottom = std::max(aligned[i].bottom, margins[j].bottom);
+                aligned[i].top = std::max(aligned[i].top, margins[j].top);
+            }
+        }
+    }
 
-    Double_t YMargin = 0.0;
-    Double_t XMargin = 0.0;
-    Double_t yTitleOffsetRoot = 0.0;
-    Double_t xTitleOffsetRoot = 0.0;
- 
+    for (size_t i = 0; i < n; ++i) {
+        if (fPads[i]->HasDrawables()) fPads[i]->ApplyMargins(aligned[i]);
+    }
+}
+
+void PadContainer::DrawAllPads(TVirtualPad* parent, const Layout::Sizes& baseSizes) {
+    // Text sizes are in pixels, scaled with the canvas so that the style does not depend on its size
+    const Double_t canvasW = parent->GetWw();
+    const Double_t canvasH = parent->GetWh();
+    const Layout::Sizes sizes = baseSizes.Scaled(std::min(canvasW, canvasH) / Layout::kRefPixels);
 
     for (auto& pad : fPads) {
-        // Get axis and remove potential exponent
-        TAxis* xAxis = pad->GetXaxis();
-        TAxis* yAxis = pad->GetYaxis();
-        xAxis->SetNoExponent();
-        yAxis->SetNoExponent();
-        if (pad->GetFirstType() == 0) {
-            std::cerr << "Warning: Pad \"" << pad->GetName() << "\" has no drawables added. Skipping." << std::endl;
-            continue;
+        pad->Prepare(canvasW, canvasH, sizes);
+        if (!pad->HasDrawables()) {
+            ::Warning("PadContainer::DrawAllPads", "Pad \"%s\" of page %d has no drawables added. Skipping.", pad->GetName(), fIndex);
         }
-
-        Int_t Ncharacters = pad->SetFinalRanges();
-        Double_t padWidth = pad->GetXWidth();
-        Double_t padHeight = pad->GetYWidth();
-                
-        if (YMargin == 0.0 || !fSameYMargin) {
-            // Title size
-            YMargin = fYTitleLabelSize;
-            XMargin = fXTitleLabelSize;
-
-            // Label size
-            YMargin += fYLabelSize * Ncharacters - fYLabelSize*(0.5 - padWidth)/0.4; 
-            XMargin += fXLabelSize;
-
-            // Title offset is a ROOT axis-unit multiplier, not a margin component.
-            yTitleOffsetRoot = (fYTitleLabelOffset * Ncharacters) / fYTitleLabelSize + (0.5 - padWidth)/0.6;
-            xTitleOffsetRoot = fXTitleLabelOffset / fXTitleLabelSize;
-            YMargin += fYTitleLabelOffset;
-            XMargin += fXTitleLabelOffset;
-
-            // Extra margin
-            YMargin += fYExtraMargin + (0.5 - padWidth)/0.5;
-            XMargin += fXExtraMargin;
-        }
-
-        yAxis->SetLabelSize(fYLabelSize);
-        xAxis->SetLabelSize(fXLabelSize);
-        yAxis->SetTitleOffset(yTitleOffsetRoot);
-        xAxis->SetTitleOffset(xTitleOffsetRoot);
-        yAxis->SetTitleSize(fYTitleLabelSize);
-        xAxis->SetTitleSize(fXTitleLabelSize);
-        
-        pad->SetLeftMargin(YMargin);
-        pad->SetRightMargin(0.005);
-        pad->SetBottomMargin(XMargin);
-        pad->SetTopMargin(0.04);
-        
     }
-    for (auto& pad : fPads) { 
+
+    // Making room for a legend changes the y range, hence possibly the labels and the margins: iterate
+    for (Int_t iter = 0; iter < 4; ++iter) {
+        ApplyAlignedMargins();
+        Bool_t changed = kFALSE;
+        for (auto& pad : fPads) {
+            if (pad->HasDrawables() && pad->PlaceLegend()) changed = kTRUE;
+        }
+        if (!changed) break;
+    }
+
+    for (auto& pad : fPads) {
+        if (!pad->HasDrawables()) continue;
         parent->cd();     // Make sure parent is current before drawing subpad
         pad->Draw();      // Draw the pad onto the parent
-        pad->cd();        // cd into the pad
         pad->DrawAll();   // Draw content inside the pad
     }
 }
 
 
-/////////////////////////////
-// LEGENDS AND OTHER BOXES //
-/////////////////////////////
-
-void PadContainer::SetLegend(Option_t* option){
-    DrawableBox boxInfo;
-    boxInfo.type = 1; // TLegend
-    boxInfo.leg = new TLegend();
-    boxInfo.option = option;
-    fDrawableBoxes.push_back(boxInfo);
-}
-
-void PadContainer::SetLegend(Double_t x1, Double_t y1, Double_t x2, Double_t y2, Option_t* option){
-
-}
-
-TLegend* PadContainer::GetLegend() {
-    for (const auto& boxInfo : fDrawableBoxes) {
-        if (boxInfo.type == 1) return boxInfo.leg;
-    }
-    std::cerr << "GetLegend(): No TLegend found!" << std::endl;
-    return nullptr;
-}
-
-
-Double_t PadContainer::EstimateLegendWidth(TLegend* leg) {
-    if (!leg) return 0.0;
-    
-    // Get text attributes from legend
-    Double_t textSize = leg->GetTextSize();
-    Int_t textFont = leg->GetTextFont();
-    
-    TLatex latex;
-    latex.SetTextSize(textSize);
-    latex.SetTextFont(textFont);
-    
-    Double_t maxWidth = 0.0;
-    
-    // Iterate over all entries in the legend
-    TList* primitives = leg->GetListOfPrimitives();
-    if (primitives) {
-        TIter next(primitives);
-        TObject* obj;
-        while ((obj = next())) {
-            TLegendEntry* entry = dynamic_cast<TLegendEntry*>(obj);
-            if (entry) {
-                const char* label = entry->GetLabel();
-                Double_t w = latex.GetXsize();  // or use GetBBox
-                if (w > maxWidth) maxWidth = w;
-            }
-        }
-    }
-    
-    // Add padding for the symbol/marker box (typically ~0.05-0.08 in NDC)
-    Double_t symbolWidth = 0.08;  // estimate for "LP" style marker+line
-    Double_t padding = 0.02;      // left/right padding
-    
-    return maxWidth + symbolWidth + 2 * padding;
-}
-
-// void PadContainer::DrawAllBoxes() {
-
-//     for (auto& [index, boxInfo] : fDrawableBoxes) {
-//         if (boxInfo.type == 0 && boxInfo.box) { // TBox
-//             boxInfo.box->Draw(boxInfo.option.Data());
-//         } else if (boxInfo.type == 1 && boxInfo.leg) { // TLegend
-//             boxInfo.leg->Draw(boxInfo.option.Data());
-//         }
-//     }
-// }
-
-
-
-void PadContainer::ClearLegend(Int_t legIndex) {
-    for (size_t i=0; i < fDrawableBoxes.size(); i++) {
-        if (fDrawableBoxes[i].type == 1 && i == legIndex) {
-            delete fDrawableBoxes[i].leg;
-            fDrawableBoxes.erase(fDrawableBoxes.begin() + i);
-            return;
-        }
-    }
-}
-
-
-
-void PadContainer::Print(){
-    std::cout << "--------- Page " << fIndex << ", " << fNPads << " Pads, Mode: " << GetStringFromMode() << " --------" << std::endl;
-    for (size_t ipad=0; ipad < fPads.size(); ipad++){
-        fPads[ipad]->Print();
+void PadContainer::PrintInfo() const {
+    std::cout << "--------- Page " << fIndex << ", " << fPads.size() << " Pads, Mode: " << GetStringFromMode() << " --------" << std::endl;
+    for (const auto& pad : fPads) {
+        pad->PrintInfo();
     }
 }
 

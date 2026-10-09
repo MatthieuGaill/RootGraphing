@@ -1,22 +1,28 @@
 CXX = g++
-CXXFLAGS = -std=c++17 -Iinclude $(shell root-config --cflags)
+CXXFLAGS = -std=c++17 -O2 -Wall -Wextra -Iinclude $(shell root-config --cflags)
 DEPFLAGS = -MMD -MP
-LDFLAGS = $(shell root-config --libs)
+LDLIBS = $(shell root-config --libs)
 SRCS = $(wildcard src/*.cpp) main.cpp
-OBJS = $(SRCS:.cpp=.o)
+OBJDIR = build/obj
+OBJS = $(patsubst %.cpp,$(OBJDIR)/%.o,$(SRCS))
 DEPS = $(OBJS:.o=.d)
 TARGET = build/smart_canvas
+
+.PHONY: all run clean
 
 all: $(TARGET)
 
 $(TARGET): $(OBJS)
-	mkdir -p build
-	$(CXX) -o $@ $^ $(LDFLAGS)
+	$(CXX) -o $@ $^ $(LDLIBS)
 
-%.o: %.cpp
+$(OBJDIR)/%.o: %.cpp
+	@mkdir -p $(dir $@)
 	$(CXX) $(CXXFLAGS) $(DEPFLAGS) -c $< -o $@
 
 -include $(DEPS)
 
+run: $(TARGET)
+	./$(TARGET)
+
 clean:
-	rm -f src/*.o *.o src/*.d *.d $(TARGET)
+	rm -rf build

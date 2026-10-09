@@ -19,128 +19,117 @@ namespace ROOTEnhancedGraphing {
 
 
 SmartCanvas::SmartCanvas(const char* name, const char* title, const char* savePath_, Int_t ww, Int_t wh, Bool_t verbose)
-    : TCanvas(name, title, ww, wh), fTitle(title), fSavePath(savePath_), fActivePageIndex(-1), fWidth(ww), fHeight(wh), fverbose(verbose)
+    : TCanvas(EnableBatch(name), title, ww, wh), fSavePath(savePath_), fverbose(verbose)
     {
-    gROOT->SetBatch(kTRUE); // Enable batch mode
-    gStyle->SetOptStat(0);
-    gStyle->SetOptTitle(0);
-    gStyle->SetPalette(kBird);
-    gStyle->SetLegendBorderSize(0);
-    gStyle->SetLegendFillColor(0);
-    
-    // Apply canvas-specific styling
+    if (fSavePath.IsNull()) fSavePath = name;
+
+    // Private style, starting from ROOT's "Modern" one. The name must be unique: TStyle deletes a homonym.
+    static Int_t styleCounter = 0;
+    const TString styleName = TString::Format("SmartCanvasStyle_%d", styleCounter++);
+    fStyle = std::make_unique<TStyle>(styleName, "SmartCanvas style");
+    if (const TStyle* modern = gROOT->GetStyle("Modern")) {
+        modern->Copy(*fStyle);
+        fStyle->SetName(styleName);
+        fStyle->SetTitle("SmartCanvas style");
+    }
     ApplyCustomStyle();
-    // Force the current style onto already-created objects (histograms, graphs, etc.)
-    gROOT->ForceStyle();
-    fPages.clear();
-    if (!verbose) gErrorIgnoreLevel = kWarning;
 }
 
 SmartCanvas::~SmartCanvas() {
-    fPages.clear();
+    Clear();         // detach the pads of the last page (they are not deleted, see SmartPad)
+    fPages.clear();  // then delete them
+}
+
+const char* SmartCanvas::EnableBatch(const char* name) {
+    // Called before the TCanvas constructor, so that no window is ever opened
+    gROOT->SetBatch(kTRUE);
+    return name;
 }
 
 void SmartCanvas::ApplyCustomStyle() {
-    // Canvas-specific settings (margins, etc.)
-    // SetLeftMargin(0.05);
-    // SetRightMargin(0.05);
-    // SetTopMargin(0.05);
-    // SetBottomMargin(0.05);
-    // SetFrameBorderMode(0);
-    // SetBorderMode(0);
-    // SetBorderSize(0);
+    // Text sizes, offsets, tick lengths and margins are set per pad, in pixels (see LayoutTools.hh)
+    TStyle* s = fStyle.get();
 
-    gStyle->SetFrameLineWidth(1);
-    gStyle->SetFrameLineColor(kGray+3);
+    s->SetOptStat(0);
+    s->SetOptTitle(0);
+    s->SetPalette(kBird);
+    s->SetLegendBorderSize(0);
+    s->SetLegendFillColor(0);
+
+    s->SetFrameLineWidth(1);
+    s->SetFrameLineColor(kGray+3);
+    s->SetFrameFillColor(0);
 
 
-    gStyle->SetNdivisions(505, "x");
-    gStyle->SetNdivisions(505, "y");
-    gStyle->SetNdivisions(505, "z");
-    gStyle->SetAxisColor(22, "x");
-    gStyle->SetAxisColor(1, "y");
-    gStyle->SetAxisColor(1, "z");
+    s->SetNdivisions(505, "x");
+    s->SetNdivisions(505, "y");
+    s->SetNdivisions(505, "z");
+    s->SetAxisColor(1, "x");
+    s->SetAxisColor(1, "y");
+    s->SetAxisColor(1, "z");
 
-    gStyle->SetLabelColor(1, "x");
-    gStyle->SetLabelColor(1, "y");
-    gStyle->SetLabelColor(1, "z");
-    gStyle->SetLabelFont(42, "x");
-    gStyle->SetLabelFont(42, "y");
-    gStyle->SetLabelFont(42, "z");
-    // gStyle->SetLabelOffset(0.003, "x");
-    // gStyle->SetLabelOffset(0.003, "y");
-    // gStyle->SetLabelOffset(0.003, "z");
-    // gStyle->SetLabelSize(0.032, "x");
-    // gStyle->SetLabelSize(0.032, "y");
-    // gStyle->SetLabelSize(0.032, "z");
+    s->SetLabelColor(1, "x");
+    s->SetLabelColor(1, "y");
+    s->SetLabelColor(1, "z");
 
-    // gStyle->SetTickLength(0.02, "x");
-    // gStyle->SetTickLength(0.02, "y");
-    // gStyle->SetTickLength(0.01, "z");
-
-    gStyle->SetTitleAlign(22);
-    // gStyle->SetTitleSize(0.03, "x");
-    // gStyle->SetTitleSize(0.03, "y");
-    // gStyle->SetTitleSize(0.03, "z");
-    // gStyle->SetTitleColor(12, "x");
-    // gStyle->SetTitleColor(12, "y");
-    // gStyle->SetTitleColor(12, "z");
-    // gStyle->SetTitleFont(42, "x");
-    // gStyle->SetTitleFont(42, "y");
-    // gStyle->SetTitleFont(42, "z");
-    gStyle->SetTitleFillColor(0);
-    gStyle->SetTitleTextColor(13);
-    gStyle->SetTitleFont(62);
+    s->SetTitleAlign(22);
+    s->SetTitleFillColor(0);
+    s->SetTitleTextColor(13);
+    s->SetTitleFont(62, "t"); // pad title (any option other than x, y, z)
 
     // Canvas and pad
-    gStyle->SetCanvasColor(0);      // White canvas
-    gStyle->SetPadColor(0);         // White pad
-    gStyle->SetPadBorderMode(0);
-    gStyle->SetCanvasBorderMode(0);
-    gStyle->SetFrameBorderMode(0);
+    s->SetCanvasColor(0);      // White canvas
+    s->SetPadColor(0);         // White pad
+    s->SetPadBorderMode(0);
+    s->SetCanvasBorderMode(0);
+    s->SetFrameBorderMode(0);
 
     // Ticks and grid
-    gStyle->SetPadTickX(1);
-    gStyle->SetPadTickY(1);
-    gStyle->SetGridStyle(3);
-    gStyle->SetPadGridX(0);
-    gStyle->SetPadGridY(0);
+    s->SetPadTickX(1);
+    s->SetPadTickY(1);
+    s->SetGridStyle(3);
+    s->SetPadGridX(0);
+    s->SetPadGridY(0);
     // Font
-    gStyle->SetTextFont(42);        // Helvetica
-    gStyle->SetLabelFont(42, "XYZ");
-    gStyle->SetTitleFont(42, "XYZ");
-
-    // Size
-    // gStyle->SetTitleSize(0.05, "XYZ");
-    // gStyle->SetLabelSize(0.045, "XYZ");
-    // gStyle->SetTitleOffset(1.2, "X");
-    // gStyle->SetTitleOffset(1.4, "Y");
+    s->SetTextFont(42);        // Helvetica
+    s->SetLabelFont(Layout::kFont, "XYZ");
+    s->SetTitleFont(Layout::kFont, "XYZ");
 
     // Stats box
-    gStyle->SetOptStat(0);          // No stats box
-    gStyle->SetStatFont(42);
-    gStyle->SetStatBorderSize(1);
-    gStyle->SetStatX(0.9);
-    gStyle->SetStatY(0.9);
-    gStyle->SetStatW(0.15);
-    gStyle->SetStatH(0.1);
+    s->SetStatFont(42);
+    s->SetStatBorderSize(1);
+    s->SetStatX(0.9);
+    s->SetStatY(0.9);
+    s->SetStatW(0.15);
+    s->SetStatH(0.1);
 }
 
-void SmartCanvas::SetPage(Int_t index) {
-    SetupPage(index);
+Bool_t SmartCanvas::CheckNewPage(Int_t index) {
+    fActivePageIndex = -1; // nothing must go to the previous page if this one is not created
+    if (index < 0) {
+        ::Error("SmartCanvas::SetPage", "Page index must be non-negative (got %d).", index);
+        return kFALSE;
+    }
+    if (fPages.find(index) != fPages.end()) {
+        ::Error("SmartCanvas::SetPage", "Page %d already exists: select it with SetPage(%d).", index, index);
+        return kFALSE;
+    }
+    cd(); // the pads are created inside this canvas
+    return kTRUE;
+}
+
+Bool_t SmartCanvas::SetPage(Int_t index) {
     if (fPages.find(index) == fPages.end()) {
-        std::cerr << " Page index not found! Build a Page with another SetPage" << std::endl;
-        return;
+        ::Error("SmartCanvas::SetPage", "Page %d not found! Build it with another SetPage.", index);
+        fActivePageIndex = -1;
+        return kFALSE;
     }
     fActivePageIndex = index;
+    return kTRUE;
 }
 
-void SmartCanvas::SetPage(Int_t index, Option_t* layout) {
-    SetupPage(index);
-    if (fPages.find(index) != fPages.end()) {
-        std::cerr << " Double page index " << index << " (already exists)." << std::endl;
-        return;
-    }
+Bool_t SmartCanvas::SetPage(Int_t index, Option_t* layout) {
+    if (!CheckNewPage(index)) return kFALSE;
     TString layoutStr(layout);
     layoutStr.ToUpper();
 
@@ -154,26 +143,25 @@ void SmartCanvas::SetPage(Int_t index, Option_t* layout) {
         padContainer->AddPad("pad1", "Top Pad", 0, 0.5, 1, 1);
         padContainer->AddPad("pad2", "Bottom Pad", 0, 0, 1, 0.5);
     } else {
-        std::cout << "Any other options then 'LR' or 'UD' will create a one-pad layout." << std::endl;
+        if (!layoutStr.IsNull() && layoutStr != "SINGLE" && layoutStr != "S") {
+            ::Warning("SmartCanvas::SetPage", "Unknown layout \"%s\": using a single pad ('LR', 'UD' or 'SINGLE').", layout);
+        }
         padContainer->SetMode(PadContainer::kSingle);
         padContainer->AddPad("pad1", "Single Pad", 0, 0, 1, 1);
     }
     fPages.emplace(index, std::move(padContainer));
     fActivePageIndex = index;
+    return kTRUE;
 }
 
-void SmartCanvas::SetPage(Int_t index, Double_t scale, Option_t* layout) {
-    SetupPage(index);
-    if (fPages.find(index) != fPages.end()) {
-        std::cerr << " Double page index " << index << " (already exists)." << std::endl;
-        return;
-    }
+Bool_t SmartCanvas::SetPage(Int_t index, Double_t scale, Option_t* layout) {
+    if (!CheckNewPage(index)) return kFALSE;
     TString layoutStr(layout);
     layoutStr.ToUpper();
 
     if (scale <= 0 || scale >= 1) {
-        std::cerr << __func__ << ": Scale must be between 0 and 1." << std::endl;
-        return;
+        ::Error("SmartCanvas::SetPage", "Scale must be between 0 and 1 (got %g).", scale);
+        return kFALSE;
     }
 
     std::unique_ptr<PadContainer> padContainer = std::make_unique<PadContainer>(index);
@@ -186,111 +174,108 @@ void SmartCanvas::SetPage(Int_t index, Double_t scale, Option_t* layout) {
         padContainer->AddPad("pad1", "Top Pad", 0, scale, 1, 1);
         padContainer->AddPad("pad2", "Bottom Pad", 0, 0, 1, scale);
     } else {
-        std::cerr << "Wrong layout option provided. Available options are 'LR' and 'UD'." << std::endl;
-        return;
+        ::Error("SmartCanvas::SetPage", "Wrong layout option \"%s\". Available options are 'LR' and 'UD'.", layout);
+        return kFALSE;
     }
     fPages.emplace(index, std::move(padContainer));
     fActivePageIndex = index;
+    return kTRUE;
 }
 
-void SmartCanvas::SetPage(Int_t index, std::vector<std::array<Double_t, 4>> pad_set, Option_t* layout) {
-    SetupPage(index);
-    if (fPages.find(index) != fPages.end()) {
-        std::cerr << " Double page index " << index << " (already exists)." << std::endl;
-        return;
-    }
-    TString layoutStr(layout);
-    layoutStr.ToUpper();
+Bool_t SmartCanvas::SetPage(Int_t index, const std::vector<std::array<Double_t, 4>>& pad_set) {
+    if (!CheckNewPage(index)) return kFALSE;
 
-    if (pad_set.size() < 1) {
-        std::cerr << __func__ << ": At least one pad definition must be provided." << std::endl;
-        return;
+    if (pad_set.empty()) {
+        ::Error("SmartCanvas::SetPage", "At least one pad definition must be provided.");
+        return kFALSE;
     }
 
     std::unique_ptr<PadContainer> padContainer = std::make_unique<PadContainer>(index);
-
-    int i = 0;
-    char PadName[100];
-    for (const auto& padDef : pad_set) {
-        sprintf(PadName, "Pad%d", i);
-        padContainer->AddPad(PadName, PadName, padDef[0], padDef[1], padDef[2], padDef[3]);
-        i++;
+    padContainer->SetMode(PadContainer::kCustom);
+    for (size_t i = 0; i < pad_set.size(); ++i) {
+        const auto& padDef = pad_set[i];
+        const TString padName = TString::Format("Pad%zu", i);
+        if (!padContainer->AddPad(padName, padName, padDef[0], padDef[1], padDef[2], padDef[3])) {
+            ::Error("SmartCanvas::SetPage", "Page %d not created.", index);
+            return kFALSE;
+        }
     }
 
     fPages.emplace(index, std::move(padContainer));
     fActivePageIndex = index;
+    return kTRUE;
 }
 
-void SmartCanvas::AddDrawable(Int_t padIndex, TObject* obj, Option_t* option, TString legEntry) {
+Bool_t SmartCanvas::AddDrawable(Int_t padIndex, TObject* obj, Option_t* option, TString legEntry) {
     /*
-    Adds a drawable object (TH1, TGraph, etc.) to the specified pad in the active page.
+    Adds a drawable object (TH1, TH2, TGraph) to the specified pad in the active page.
     Validates the active page and pad index before adding.
     */
-    if (fPages.find(fActivePageIndex) == fPages.end()) {
-        std::cerr << __func__ << ": Active page index not found! Set a valid page first." << std::endl;
-        return;
+    auto it = fPages.find(fActivePageIndex);
+    if (it == fPages.end()) {
+        ::Error("SmartCanvas::AddDrawable", "No active page! Create or select one with SetPage first.");
+        return kFALSE;
     }
-    PadContainer* padContainer = fPages[fActivePageIndex].get();
-    SmartPad* pad = padContainer->getPad(padIndex);
-    if (!pad) {
-        std::cerr << __func__ << ": Pad index not found in the active page!" << std::endl;
-        return;
-    }
-    pad->Add(obj, option);
-}
-
-void SmartCanvas::SetupPage(Int_t index) {
-    if (index < 0 ) {
-        std::cerr << " Page index must be non-negative." << std::endl;
-        return;
-    }
+    SmartPad* pad = it->second->GetPad(padIndex);
+    if (!pad) return kFALSE;
+    return pad->AddDrawable(obj, option, legEntry);
 }
 
 void SmartCanvas::DrawAndSave() {
-    this->Print(Form("%s.pdf[", fSavePath));
+    if (fPages.empty()) {
+        ::Warning("SmartCanvas::DrawAndSave", "No page to draw.");
+        return;
+    }
+
+    // Draw with our style and quiet ROOT's info messages, restore both afterwards
+    TStyle* previousStyle = gStyle;
+    const Int_t previousErrorLevel = gErrorIgnoreLevel;
+    fStyle->cd();
+    if (!fverbose && gErrorIgnoreLevel < kWarning) gErrorIgnoreLevel = kWarning;
+
+    SetFillColor(gStyle->GetCanvasColor());
+    SetBorderMode(gStyle->GetCanvasBorderMode());
+
+    const TString file = fSavePath + ".pdf";
+    this->Print(file + "[");
     for (auto& pagePair : fPages) {
-        Int_t pageIndex = pagePair.first;
         PadContainer* padContainer = pagePair.second.get();
 
-        this->Clear();    // Clear canvas before drawing new page
+        this->Clear();    // Clear canvas before drawing new page (the pads are not deleted)
         this->cd();       // Make canvas the current pad
-        padContainer->DrawAllPads(this);  // Pass canvas pointer
+        padContainer->DrawAllPads(this, fSizes);  // Pass canvas pointer
         this->Update();   // Update canvas after all pads are drawn
 
         // Save each page
-        this->Print(Form("%s.pdf", fSavePath));
+        this->Print(file);
     }
-    this->Print(Form("%s.pdf]", fSavePath));
-    // this->Close();
+    this->Print(file + "]");
+
+    if (previousStyle) previousStyle->cd();
+    gErrorIgnoreLevel = previousErrorLevel;
     if (fverbose) {
-        std::cout << "Saved canvas to " << fSavePath << ".pdf" << std::endl;
+        std::cout << "Saved canvas to " << file << std::endl;
     }
 }
 
 PadContainer* SmartCanvas::GetPage(Int_t index) {
-    if (fPages.find(index) != fPages.end()) {
-        return fPages[index].get();
-    } else {
-        std::cerr << "Page index not found!" << std::endl;
-        exit(1);
+    auto it = fPages.find(index);
+    if (it == fPages.end()) {
+        ::Error("SmartCanvas::GetPage", "Page %d not found!", index);
         return nullptr;
     }
+    return it->second.get();
 }
 
 SmartPad* SmartCanvas::GetPad(Int_t index, Int_t padIndex) {
     PadContainer* padContainer = GetPage(index);
-    if (padContainer) {
-        return padContainer->getPad(padIndex);
-    } else {
-        std::cerr << "No Pad with index " << padIndex << " found on Page " << index << std::endl;
-        return nullptr;
-    }
+    return padContainer ? padContainer->GetPad(padIndex) : nullptr;
 }
 
 void SmartCanvas::PrintInfo(){
-    std::cout << "---=========== Canvas " << fTitle << " ===========---\n" << std::endl;
+    std::cout << "---=========== Canvas " << GetTitle() << " ===========---\n" << std::endl;
     for (auto& [key, page] : fPages) {
-        page->Print();
+        page->PrintInfo();
     }
     std::cout << "---=================================---\n" << std::endl;
 }
