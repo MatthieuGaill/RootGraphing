@@ -19,6 +19,9 @@ public:
     // Default legend text size of all pads, in pixels for an 800x600 canvas (scaled with the canvas size).
     // A pad can override it with SmartPad::SetLegendTextSize.
     void SetLegendTextSize(Double_t sizePx) { fSizes.legend = sizePx; }
+    // Grid on the 1D pads (on by default). A pad can override it with SmartPad::ShowGrid.
+    // Its look comes from the style: GetStyle()->SetGridColor(...), SetGridStyle(...), SetGridWidth(...)
+    void ShowGrid(Bool_t show = kTRUE) { fShowGrid = show; }
     void DrawAndSave();
 
 private:
@@ -26,6 +29,7 @@ private:
     Bool_t fverbose = false;
     std::unique_ptr<TStyle> fStyle;
     Layout::Sizes fSizes; // text sizes and spacings, in pixels for an 800x600 canvas
+    Bool_t fShowGrid = kTRUE;
     std::map<Int_t, std::unique_ptr<PadContainer>> fPages;
     Int_t fActivePageIndex = -1;
 

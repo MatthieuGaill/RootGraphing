@@ -41,7 +41,7 @@ private:
     Bool_t AddPad(const char* name, const char* title, Double_t x1, Double_t y1, Double_t x2, Double_t y2);
     void cd(Int_t padIndex);
     void ApplyAlignedMargins();
-    void DrawAllPads(TVirtualPad* parent, const Layout::Sizes& baseSizes);
+    void DrawAllPads(TVirtualPad* parent, const Layout::Sizes& baseSizes, Bool_t gridDefault);
 
 public:
     SmartPad* GetPad(Int_t padIndex) const {

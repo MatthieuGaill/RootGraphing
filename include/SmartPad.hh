@@ -73,6 +73,8 @@ private:
     Double_t fLegendTextPx = 0.;                 // text size actually used (reduced if the legend is too wide)
     Bool_t fLegendOverlaps = kFALSE;
 
+    Int_t fShowGrid = -1; // grid on 1D pads: -1 canvas default, 0 off, 1 on
+
     // Layout of the current drawing, in pixels
     struct Margins {
         Double_t left = 0., right = 0., bottom = 0., top = 0.;
@@ -109,7 +111,7 @@ private:
     void DrawLegend();
 
     // Called by PadContainer when the page is drawn, in this order
-    void Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes);
+    void Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes, Bool_t gridDefault);
     Bool_t PlaceLegend(); // after the margins; kTRUE if the y range had to grow to fit the legend
     void DrawAll();
 
@@ -144,6 +146,10 @@ public:
         fLegendUserPos = kTRUE;
     }
     void SetAutoLegendPosition() { fLegendUserPos = kFALSE; }
+
+    // Grid (1D pads only), overriding the canvas default
+    void ShowGrid(Bool_t show = kTRUE) { fShowGrid = show; }
+    void UseDefaultGrid() { fShowGrid = -1; }
 
     void PrintInfo() const;
     void PrintGrid() const;

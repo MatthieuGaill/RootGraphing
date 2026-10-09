@@ -14,6 +14,7 @@
 #include "TROOT.h"
 #include "TStyle.h"
 #include "TError.h"
+#include "TColor.h"
 
 namespace ROOTEnhancedGraphing {
 
@@ -87,7 +88,9 @@ void SmartCanvas::ApplyCustomStyle() {
     // Ticks and grid
     s->SetPadTickX(1);
     s->SetPadTickY(1);
-    s->SetGridStyle(3);
+    s->SetGridStyle(1);        // thin solid soft gray grid (switched on per pad)
+    s->SetGridWidth(1);
+    s->SetGridColor(TColor::GetColor("#dcdcdc"));
     s->SetPadGridX(0);
     s->SetPadGridY(0);
     // Font
@@ -243,7 +246,7 @@ void SmartCanvas::DrawAndSave() {
 
         this->Clear();    // Clear canvas before drawing new page (the pads are not deleted)
         this->cd();       // Make canvas the current pad
-        padContainer->DrawAllPads(this, fSizes);  // Pass canvas pointer
+        padContainer->DrawAllPads(this, fSizes, fShowGrid);  // Pass canvas pointer
         this->Update();   // Update canvas after all pads are drawn
 
         // Save each page

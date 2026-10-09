@@ -246,7 +246,7 @@ void SmartPad::ComputeFrame() {
                                                  : Layout::AxisLabels{};
 }
 
-void SmartPad::Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes) {
+void SmartPad::Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Sizes& sizes, Bool_t gridDefault) {
     Clear(); // remove the previous drawing: the frame is deleted, user objects are only detached
 
     // Pad look from the current (SmartCanvas) style. Not UseCurrentStyle(): it would reset log scales.
@@ -258,6 +258,8 @@ void SmartPad::Prepare(Double_t canvasWpx, Double_t canvasHpx, const Layout::Siz
     SetFrameLineWidth(gStyle->GetFrameLineWidth());
     SetFrameBorderMode(gStyle->GetFrameBorderMode());
     SetTicks(gStyle->GetPadTickX(), gStyle->GetPadTickY());
+    const Bool_t grid = (dimension == k1D) && (fShowGrid < 0 ? gridDefault : fShowGrid > 0);
+    SetGrid(grid, grid); // drawn with the frame, hence below the data
 
     fSizes = sizes;
     fPadWpx = canvasWpx * GetXWidth();
@@ -632,7 +634,12 @@ void SmartPad::DrawLegend() {
     leg->SetTextFont(Layout::kFont);
     leg->SetTextSize(fLegendTextPx);
     leg->SetBorderSize(0);
-    leg->SetFillStyle(0);
+    if (GetGridx() || GetGridy()) {
+        leg->SetFillStyle(1001); // hide the grid lines behind the text
+        leg->SetFillColor(GetFillColor());
+    } else {
+        leg->SetFillStyle(0);
+    }
     leg->SetMargin(symbolPx / ((ndc[2] - ndc[0]) * fPadWpx));
     for (const auto& d : fDrawables) {
         if (!d.legEntry.IsNull()) leg->AddEntry(d.obj, d.legEntry, LegendOption(d));
